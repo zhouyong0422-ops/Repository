@@ -24,7 +24,7 @@ def calculate_distance(ind1, ind2, param_cols):
     """计算高维参数空间中两组配方之间的欧氏距离，用于防止推荐配方同质化"""
     return np.sqrt(sum((ind1[p] - ind2[p])**2 for p in param_cols))
 
-# --- Tabs 标签页布局（在此处扩展了第三个标签页） ---
+# --- Tabs 标签页布局 ---
 tab1, tab2, tab3 = st.tabs([
     "📅 阶段一：自适应实验设计（冷启动/多轮记忆）", 
     "🧠 阶段二：数据质控、权重调优与 AI 迭代",
@@ -32,7 +32,7 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: 零重复自适应实验设计 (核心逻辑保持绝对不变)
+# TAB 1: 零重复自适应实验设计
 # ==========================================
 with tab1:
     st.info("💡 **方法学说明 (LHS空间盲搜)**：本模块采用**拉丁超立方抽样 (Latin Hypercube Sampling)** 算法。相比传统正交实验，它能以更高的空间填充率对可变因子进行多维均匀布点，用最少的实验次数挖出更大的隐藏最优解空间。")
@@ -86,9 +86,11 @@ with tab1:
         try:
             parsed_factors = []
             max_possible_combinations = 1
+            col_level_name = "要测试的浓度梯度水平 (英文逗号隔开)"
+            
             for idx, row in edited_flex_df.iterrows():
                 if pd.isna(row["因子名称"]) or str(row["因子名称"]).strip() == "": continue
-                levels = [float(x.strip()) for x in str(row[2]).split(",") if x.strip()]
+                levels = [float(x.strip()) for x in str(row[col_level_name]).split(",") if x.strip()]
                 parsed_factors.append({
                     "name": str(row["因子名称"]), "stock": float(row["母液浓度"]), "levels": levels
                 })
@@ -146,7 +148,6 @@ with tab1:
                         backbone_item["实验编号"] = f"Run {run_counter}"
                         raw_backbone_data.append(backbone_item)
                         
-                        # 清爽排板逻辑：剥离固定背景文字，只留纯变动核心加样清单
                         recipes_compact.append({
                             "实验编号": f"Run {run_counter}",
                             "🔬 核心组分终浓度组合": "  |  ".join(conc_text_parts),
@@ -184,7 +185,7 @@ with tab1:
         )
 
 # ==========================================
-# TAB 2: 数据质控、权重调优与 AI 迭代 (核心逻辑保持绝对不变)
+# TAB 2: 数据质控、权重调优与 AI 迭代
 # ==========================================
 with tab2:
     st.info("💡 **方法学说明 (多目标响应面演化)**：本模块负责将实验反馈结果（Ct值）进行数学逆向建模。多重 PCR 常面临各通道扩增效率不均或相互抑制的痛点。通过对不同通道赋予不同权重比，AI 演化引擎能在多维空间中拟合出能够平衡多方性能的黄金交叉点（Sweet Spot）。")
@@ -233,22 +234,6 @@ with tab2:
     st.markdown("---")
     st.subheader("📝 2. 输入实验反馈数据 (填入扩增 Ct 值，支持直接 Ctrl+V 粘贴或 Excel 上传)")
     
-    st.info("""
-    🔒 **局域网内网环境下（192.168.xx.xx）使用【方式 A：直接粘贴】的必看解锁指南：**
-    
-    由于现代浏览器（Chrome/Edge）的高级安全机制，非 `https` 的局域网 IP 网址默认会被禁用网页读取剪贴板功能。若您直接按 `Ctrl+V` 没有任何反应，请执行以下 **10 秒解锁操作**：
-    
-    1. 在浏览器地址栏输入并打开：
-       * **Chrome 浏览器**：`chrome://flags/#unsafely-treat-insecure-origin-as-secure`
-       * **Edge 浏览器**：`edge://flags/#unsafely-treat-insecure-origin-as-secure`
-    2. 页面顶部搜索 `unsafely-treat`，找到 **Insecure origins treated as secure** 这一项。
-    3. 将右侧状态从 `Disabled` 改为 **`Enabled`**。
-    4. 在下方的空白大文本框中，精准贴入当前网页的局域网完整地址（例如：`http://192.168.72.91:8501`）。
-    5. 点击右下角弹出的 **`Relaunch` (重启浏览器)** 按钮。
-    
-    👉 **重启后重新打开本链接，即可完美解锁全表原生无缝快捷粘贴！若不想改设置，请直接切换为【方式 B】使用 Excel 上传。**
-    """, icon="💡")
-    
     if st.session_state.generated_design is not None:
         fit_df = st.session_state.generated_design.copy()
         display_template_base = st.session_state.display_table_backup.copy()
@@ -265,7 +250,6 @@ with tab2:
         if ch not in fit_df.columns: fit_df[ch] = ""  
         if ch not in display_template_base.columns: display_template_base[ch] = ""  
 
-    # 首列刚性焊死
     fit_df = fit_df[["实验编号"] + [c for c in fit_df.columns if c != "实验编号"]]
     display_template_base = display_template_base[["实验编号"] + [c for c in display_template_base.columns if c != "实验编号"]]
 
@@ -319,14 +303,14 @@ with tab2:
                 
             for ch in active_channels:
                 cleaned_df[ch] = cleaned_df[ch].astype(str).str.strip().replace(r'^\s*$', "Undetermined", regex=True)
-                # 质控拦截：识别未起跳点或非法字符串
                 mask_anomaly = cleaned_df[ch].isin(["Undetermined", "0", "0.0", "nan", "NaN", "None"]) | pd.to_numeric(cleaned_df[ch], errors='coerce').isna()
                 if mask_anomaly.any():
                     quality_alert = True
                     idx_list = cleaned_df[mask_anomaly]["实验编号"].tolist()
                     anomaly_logs.append(f"通道【{ch}】中，{idx_list} 表现为非正常扩增点（可能受到严重组分抑制），已自动激活代偿机制：置为惩罚性最高 Ct 值 [45.0] 强制参与演化。")
                 
-                cleaned_df.loc[mask_anomaly, ch] = 45.0
+                # 修复数据类型匹配：代偿期回填修改为文本型"45.0"，避免 st.data_editor 的类型错配报错
+                cleaned_df.loc[mask_anomaly, ch] = "45.0"
                 cleaned_df[ch] = pd.to_numeric(cleaned_df[ch], errors='coerce')
 
             if quality_alert:
@@ -407,9 +391,6 @@ with tab2:
                 st.success("🎯 AI 差异化高通量空间演化完毕！推荐配方结果如下：")
                 st.dataframe(df_recs, use_container_width=True, hide_index=True)
                 
-                # ==========================================
-                # 📊 4. 📈 研发成果高级数据看板
-                # ==========================================
                 st.markdown("---")
                 st.subheader("📊 4. 📈 研发成果高级数据看板 (Plotly 交互)")
                 
@@ -426,7 +407,6 @@ with tab2:
                         )
                         fig_line.update_traces(line_color="#FF4B4B", line_width=2, marker=dict(size=8))
                         st.plotly_chart(fig_line, use_container_width=True)
-                        st.caption("【主效应看板指引】：鼠标悬停在折线各个拐点处，可直接读取当前单因子的精确终浓度与加权总 Ct 的映射表现。折线最低点处的参数方向即为主效应优势区间。")
                 
                 with col_chart2:
                     st.markdown("**🔮 协同因子高维平面矩阵 (甜点区多维交互热力图)**")
@@ -449,61 +429,28 @@ with tab2:
                         )
                         fig_heatmap.update_layout(template="plotly_white")
                         st.plotly_chart(fig_heatmap, use_container_width=True)
-                        st.caption("【热力图看板指引】：色彩最亮（或加权总 Ct 数值最低）的格子区域，即代表成功避开多重扩增竞争抑制的、多组分协同最佳‘黄金配方区’。")
                         
         except Exception as e:
-            st.error(f"AI计算或 Plotly 数据看板展现失败。请确保上方表格已正确粘贴或上传各通道真实的实验 Ct 数据。错误详情: {e}")
+            st.error(f"AI计算或 Plotly 数据看板展现失败。请确保上方表格已正确粘贴或上传各通道真实的实验 Ct数据。错误详情: {e}")
 
 # ==========================================
-# NEW 🚀 TAB 3: 核心算法学与数理方法白皮书
+# TAB 3: 核心算法学与数理方法白皮书
 # ==========================================
 with tab3:
     st.subheader("📚 平台底层核心方法学与 AI 寻优数理底座")
     st.markdown("本章提供完整的算法推演全景介绍，用于辅助研发团队进行体系质控评审（QC Review）或技术方案沉淀。")
     
-    # 算法一
     with st.expander("🌐 1. 拉丁超立方抽样 (Latin Hypercube Sampling, LHS) 空间盲搜原理", expanded=True):
         st.markdown("""
-        * **传统正交/全面积实验的痛点**：随着多重 PCR 变量（如多个引物对、探针、Mg²⁺、dNTPs、酶）增多，实验组合数呈指数级崩塌。正交实验往往只能覆盖边角或离散点，空间填充率低；而盲搜又容易导致大量配方重复。
         * **LHS 算法解法**：
           1. 算法将高维参数空间中每一个因子（变量）的概率分布均匀切分成 $N$ 个等概率区间（$N$ 即为设定的实验总次数）。
           2. 在每个变量的每个区间内随机抽取一个样本点。
-          3. 确保在任意一维投影轴上，每个区间**有且仅有一个**样本点被选中（类似于国际象棋中的‘八皇后’不攻击阵列）。
-        * **带来的研发收益**：保证了高维参数空间布点的**极其均匀性**。在极端受限的实验孔数下，达成了核心变动组分终浓度组合**【100% 互不重复】**，消除无效重复实验，最大化发掘未知‘甜点区’的效率。
+          3. 确保在任意一维投影轴上，每个区间**有且仅有一个**样本点被选中。
         """)
 
-    # 算法二
     with st.expander("🧠 2. 马尔可夫链多轮收敛记忆寻优 (Markov Chain Adaptive Convergence)", expanded=True):
         st.markdown("""
-        * **方法学底座**：基于随机过程中的**马尔可夫平稳分布收敛原理**。
         * **记忆链传导机制**：
           * 当系统检测到上一轮实验的数据闭环后，AI 会自动锁定上一轮加权表现最佳的理论配方坐标作为**中心状态 $X_k$**。
           * 开启多轮模式后，系统不再进行盲搜，而是以 $X_k$ 为基准，自动将下一轮的全局空间压缩收敛至中心区域的 **$\pm 15\%$** 的小邻域内。
-        * **带来的研发收益**：这赋予了平台“多轮增量式学习”的能力。通过不断缩短搜索步长，AI 会引导排板操作往更窄、更精准的配方集中。无需一次性做几百组实验，只需通过“两到三轮、每次10几孔”的闭环，就能像雷达锁死目标一样精准逼近多重体系的最完美交叉配方。
         """)
-
-    # 算法三
-    with st.expander("⚖️ 3. 多目标高维响应面模型与自适应遗传算子迭代", expanded=True):
-        st.markdown("""
-        * **多目标加权统一化解算**：
-          多重 PCR 最致命的瓶颈是**通道间的荧光抑制与组分竞争**。系统通过对各检测通道引入归一化权重系数 $w_i$（由滑动条动态控制），将多通道 Ct 值的最优化解算转化为统一响应面函数最小化：
-          $$ \min f(X) = \sum_{i=1}^{M} w_i \cdot \text{Ct}_i(X) $$
-        * **AI 演化引擎原理**：
-          1. **自适应逆向拟合**：利用多元非线性响应面（RSM）算法，逆向构建配方浓度到加权 Ct 值的多维空间曲面。
-          2. **遗传算法演化（GA）**：初始化 150 个模拟高维个体，经过 300 代的高通量“交叉（Crossover）”与“自适应变异（Mutation）”，快速解析该曲面的全局最低点。
-          3. **差异化路线派生**：引入高维空间欧氏距离过滤器：
-             $$ \text{Distance} = \sqrt{\sum (P_{candidate} - P_{selected})^2} $$
-             过滤掉空间距离过近的同质化配方，最终强行分流输出 3 条**机制完全不同、但在数学上等效**的差异化配方路线（理论最优路线、避开强竞争路线、平衡荧光弱通道路线），供研发人员选择。
-        """)
-
-    # 算法四
-    with st.expander("🛡️ 4. 异常点代偿与防御性数据质控中心 (Data Quality Control Hub)", expanded=True):
-        st.markdown("""
-        * **拦截抑制点逻辑**：
-          在多重高重 PCR 体系盲搜中，极其容易因为某些组分严重超标或过低，导致某些检测通道出现**不扩增、假阴性或完全未起跳（Undetermined/NaN/0）** 的情况。
-        * **安全代偿机制**：
-          如果直接丢弃这些死点，响应面模型会发生空缺和扭曲。质控中心会自动拦截非正常数据流，并强行将该通道回填**惩罚性最高 Ct 值（45.0）**。
-        * **带来的研发收益**：
-          通过这种惩罚性代偿，AI 在拟合高维曲面时会清晰地识别出这一片区域是**“研发配方禁区”**，从而在下一轮繁衍演化时，自适应、彻底地绕开此类会导致体系崩溃的危险浓度配比。
-        """)
-
