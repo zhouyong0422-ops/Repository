@@ -234,21 +234,7 @@ with tab2:
     st.markdown("---")
     st.subheader("📝 2. 输入实验反馈数据 (填入扩增 Ct 值，支持直接 Ctrl+V 粘贴或 Excel 上传)")
 
-    st.info("""
-    🔒 **局域网内网环境下（192.168.xx.xx）使用【方式 A：直接粘贴】的必看解锁指南：**
     
-    由于现代浏览器（Chrome/Edge）的高级安全机制，非 `https` 的局域网 IP 网址默认会被禁用网页读取剪贴板功能。若您直接按 `Ctrl+V` 没有任何反应，请执行以下 **10 秒解锁操作**：
-    
-    1. 在浏览器地址栏输入并打开：
-       * **Chrome 浏览器**：`chrome://flags/#unsafely-treat-insecure-origin-as-secure`
-       * **Edge 浏览器**：`edge://flags/#unsafely-treat-insecure-origin-as-secure`
-    2. 页面顶部搜索 `unsafely-treat`，找到 **Insecure origins treated as secure** 这一项。
-    3. 将右侧状态从 `Disabled` 改为 **`Enabled`**。
-    4. 在下方的空白大文本框中，精准贴入当前网页的局域网完整地址（例如：`http://192.168.72.91:8501`）。
-    5. 点击右下角弹出的 **`Relaunch` (重启浏览器)** 按钮。
-    
-    👉 **重启后重新打开本链接，即可完美解锁全表原生无缝快捷粘贴！若不想改设置，请直接切换为【方式 B】使用 Excel 上传。**
-    """, icon="💡")
     
     if st.session_state.generated_design is not None:
         fit_df = st.session_state.generated_design.copy()
