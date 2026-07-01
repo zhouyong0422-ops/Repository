@@ -111,7 +111,7 @@ with tab1:
 
     with col_right:
         st.subheader("🔀 2. 固定组分体积锁定 (不参与变动)")
-        st.caption("锁定的体积会在总反应体系中自动扣除，确保 0.1%DEPC水 补位绝对精准。常用于 Buffer、内标、模板等已固定加样量的组分。")
+       
         bg_default = {
             "固定组分名称": ["10× PCR Buffer", "内标探针/引物 Mix", "模板"],
             "单孔加样单价体积 (μL)": [2.5, 1.0, 5]
