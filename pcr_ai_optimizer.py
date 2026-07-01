@@ -112,8 +112,8 @@ with tab1:
     with col_right:
         st.subheader("🔀 2. 固定组分体积锁定 (不参与变动)")
         bg_default = {
-            "固定组分名称": ["10× PCR Buffer", "内标探针/引物 Mix", "UNG 酶"],
-            "单孔加样单价体积 (μL)": [2.5, 1.0, 0.5]
+            "固定组分名称": ["10× PCR Buffer", "内标探针/引物 Mix", "模板"],
+            "单孔加样单价体积 (μL)": [2.5, 1.0, 5]
         }
         if 'bg_factors' not in st.session_state:
             st.session_state.bg_factors = pd.DataFrame(bg_default)
