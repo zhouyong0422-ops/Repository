@@ -111,6 +111,7 @@ with tab1:
 
     with col_right:
         st.subheader("🔀 2. 固定组分体积锁定 (不参与变动)")
+        st.caption("锁定的体积会在总反应体系中自动扣除，确保 0.1%DEPC水 补位绝对精准。常用于 Buffer、内标、模板等已固定加样量的组分。")
         bg_default = {
             "固定组分名称": ["10× PCR Buffer", "内标探针/引物 Mix", "模板"],
             "单孔加样单价体积 (μL)": [2.5, 1.0, 5]
@@ -124,9 +125,14 @@ with tab1:
     st.markdown("---")
     st.subheader("🔫 3. 设定本轮排板探索模式与总次数")
     mode_option = "🌐 全局空间盲搜 (第一轮冷启动)"
-    if st.session_state.last_round_best is not None:
-        mode_option = st.radio("🤖 模式选择：", ["🌐 全局空间盲搜 (重置冷启动)", "🔁 多轮收敛记忆链 (以上轮最优配方为中心进行 ±15% 精细寻优)"])
-    num_runs = st.number_input("请输入本轮准备做的实验总次数 (孔数)：", min_value=4, value=12, step=1)
+   if st.session_state.last_round_best is not None:
+        mode_option = st.radio(
+            "🤖 检测到上一轮存在 AI 最优解记忆，请选择本轮排板探索模式：", 
+            ["🌐 全局空间盲搜 (重置冷启动)", "🔁 多轮收敛记忆链 (以上轮最优配方为中心进行 ±15% 精细寻优)"],
+            help="【多轮收敛记忆链】是闭环迭代的核心。它利用马尔可夫收敛原理，自动缩小探索步长，围绕上一轮的最优解进行高密度精准轰炸。"
+        )
+    
+    num_runs = st.number_input("请输入本轮准备做的实验总次数 (孔数)：", min_value=4, value=12, step=1, help="建议多联包或96孔板排板时设定为4的倍数。")
     
     # ==========================================
     # 核心重构：后台 LHS 算力引擎换算适配
@@ -215,7 +221,7 @@ with tab1:
                             "实验编号": f"Run {run_counter}",
                             "🔬 核心组分状态（终浓度及换算孔内终用量）": "  |  ".join(conc_text_parts),
                             "🔧 核心变动组分加样清单 (μL)": " | ".join(vol_text_parts),
-                            "💧 ddH2O 补位 (μL)": water_vol if water_vol >=0 else 0.0
+                            "💧 0.1%DEPC水 补位 (μL)": water_vol if water_vol >=0 else 0.0
                         })
                         run_counter += 1
             
@@ -223,11 +229,11 @@ with tab1:
             df_compact = df_compact[["实验编号"] + [c for c in df_compact.columns if c != "实验编号"]]
             st.session_state.generated_design = pd.DataFrame(raw_backbone_data)
             st.session_state.display_table_backup = df_compact
-            st.success(f"🧬 系统已为您成功演化方案，并自动完成了终浓度与绝对用量的双向对调折算：")
+            st.success(f"🧬 系统已基于【拉丁超立方抽样 (LHS) 空间分层平衡方法】，同时根据您设定的 {num_runs} 次实验需求，在多维空间中为您演化并生成以下最佳组合方案：")
             st.dataframe(df_compact, use_container_width=True, hide_index=True)
                 
         except Exception as e:
-            st.error(f"解析输入失败，请确认输入的梯度和母液是否为纯数字。报错详情: {e}")
+            st.error(f"解析输入失败。请检查浓度梯度格式是否正确（需用英文逗号分隔）。错误详情: {e}")
 
     if st.session_state.display_table_backup is not None:
         st.markdown("---")
