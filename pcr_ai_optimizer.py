@@ -35,95 +35,152 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: 零重复自适应实验设计
 # ==========================================
 with tab1:
-    st.info("💡 **方法学说明 (LHS空间盲搜)**：本模块采用**拉丁超立方抽样 (Latin Hypercube Sampling)** 算法。相比传统正交实验，它能以更高的空间填充率对可变因子进行多维均匀布点，用最少的实验次数挖出更大的隐藏最优解空间。")
+    st.info("💡 **方法学说明 (LHS空间盲搜)**：本模块采用**拉丁超立方抽样 (Latin Hypercube Sampling)** 算法。支持自由切换【终浓度】或【单孔终用量】录入梯度。")
     
     col_left, col_right = st.columns([2, 1])
     
     with col_left:
-        st.subheader("🛠️ 1. 动态配置可变优化因子与浓度梯度")
-        st.markdown("*配置您本轮想要优化的关键组分。可在表格底部直接双击新增行。*")
-        st.session_state.total_vol = st.number_input("单孔总反应体系体积设定 (μL)", min_value=5.0, max_value=100.0, value=st.session_state.total_vol, step=1.0, help="设定单孔总反应的终体积，系统以此为基准结合母液浓度自动计算实际加样量。")
+        st.subheader("🛠️ 1. 动态配置可变优化因子与梯度（可切换填写模式）")
+        st.session_state.total_vol = st.number_input("单孔总反应体系体积设定 (μL)", min_value=5.0, max_value=100.0, value=st.session_state.total_vol, step=1.0)
         
+        # 1. 升级默认初始化表格数据，引入“填写模式”与“单位/总量说明”
         flexible_default = {
-            "因子名称": ["Mg2+浓度 (mM)", "引物对A (μM)", "引物对B (μM)", "Taq酶量 (U/μL)", "dNTPs (mM)"],
-            "母液浓度": [50.0, 10.0, 10.0, 5.0, 10.0],
-            "要测试的浓度梯度水平 (英文逗号隔开)": ["2.5, 3.5, 4.5", "0.2, 0.4", "0.1, 0.3, 0.5", "0.1, 0.2, 0.3", "0.2, 0.4"]
+            "因子名称": ["Mg2+浓度", "引物对A", "引物对B", "Taq酶量", "dNTPs"],
+            "母液浓度": [50.0, 10.0, 10.0, 25.0, 10.0],
+            "填写模式": ["按终浓度填写", "按终浓度填写", "按终浓度填写", "按单孔终用量填写", "按终浓度填写"],
+            "要测试的梯度水平 (英文逗号隔开)": ["2.5, 3.5, 4.5", "0.2, 0.4", "0.1, 0.3, 0.5", "12.5, 25.0, 37.5", "0.2, 0.4"],
+            "用量单位 (如mM/μM/U/pmol)": ["mM", "μM", "μM", "U", "mM"]
         }
         if 'flex_factors' not in st.session_state:
             st.session_state.flex_factors = pd.DataFrame(flexible_default)
             
-        edited_flex_df = st.data_editor(st.session_state.flex_factors, num_rows="dynamic", use_container_width=True, key="grid_factors", hide_index=True)
-    
+        # 2. 使用 data_editor 的 column_config 属性，将“填写模式”固化为下拉菜单，方便挑选项
+        edited_flex_df = st.data_editor(
+            st.session_state.flex_factors, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="grid_factors_v2", 
+            hide_index=True,
+            column_config={
+                "填写模式": st.column_config.SelectboxColumn(
+                    "填写模式",
+                    options=["按终浓度填写", "按单孔终用量填写"],
+                    required=True,
+                    help="挑【按终浓度】则梯度填浓度(如mM)；挑【按单孔终用量】则直接填孔内总量(如绝对U数)"
+                )
+            }
+        )
+        
+        # 3. 实时全双工无缝动态折算看板
+        with st.expander("🔍 点击展开：双向逻辑自动换算与质控核对看板"):
+            try:
+                summary_data = []
+                for _, row in edited_flex_df.iterrows():
+                    if pd.isna(row["因子名称"]) or str(row["因子名称"]).strip() == "": continue
+                    name = str(row["因子名称"])
+                    mode = str(row["填写模式"])
+                    stock = float(row["母液浓度"])
+                    unit = str(row["用量单位 (如mM/μM/U/pmol)"])
+                    raw_input = str(row["要测试的梯度水平 (英文逗号隔开)"])
+                    
+                    levels = [float(x.strip()) for x in raw_input.split(",") if x.strip()]
+                    
+                    show_conc_list = []
+                    show_amt_list = []
+                    
+                    for val in levels:
+                        if mode == "按终浓度填写":
+                            conc = val
+                            amt = round(val * st.session_state.total_vol, 2)
+                        else:  # 按单孔终用量填写 -> 逆向推导终浓度 = 总量 / 体系体积
+                            amt = val
+                            conc = round(val / st.session_state.total_vol, 4)
+                        
+                        show_conc_list.append(f"{conc} {unit}")
+                        show_amt_list.append(f"{amt} {unit}总量")
+                    
+                    summary_data.append({
+                        "核心组分": name,
+                        "当前录入类型": mode,
+                        "全归一化终浓度梯度": " | ".join(show_conc_list),
+                        "换算后单孔绝对用量": " | ".join(show_amt_list)
+                    })
+                st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
+            except Exception:
+                st.caption("正在等待梯度输入转换为合法数字...")
+
     with col_right:
         st.subheader("🔀 2. 固定组分体积锁定 (不参与变动)")
-        st.caption("锁定的体积会在总反应体系中自动扣除，确保 0.1%DEPC水 补位绝对精准。常用于 Buffer、内标等已固定加样量的组分。")
-        
         bg_default = {
-            "固定组分名称": ["5× PCR Buffer", "内标探针/引物 Mix", "UNG 酶 (U/μL)"],
+            "固定组分名称": ["10× PCR Buffer", "内标探针/引物 Mix", "UNG 酶"],
             "单孔加样单价体积 (μL)": [2.5, 1.0, 0.5]
         }
         if 'bg_factors' not in st.session_state:
             st.session_state.bg_factors = pd.DataFrame(bg_default)
-            
         edited_bg_df = st.data_editor(st.session_state.bg_factors, num_rows="dynamic", use_container_width=True, key="grid_bg", hide_index=True)
         total_bg_vol = edited_bg_df["单孔加样单价体积 (μL)"].sum()
         st.metric("已锁定的基础背景总体积", f"{total_bg_vol:.2f} μL")
 
     st.markdown("---")
     st.subheader("🔫 3. 设定本轮排板探索模式与总次数")
-    
     mode_option = "🌐 全局空间盲搜 (第一轮冷启动)"
     if st.session_state.last_round_best is not None:
-        mode_option = st.radio(
-            "🤖 检测到上一轮存在 AI 最优解记忆，请选择本轮排板探索模式：", 
-            ["🌐 全局空间盲搜 (重置冷启动)", "🔁 多轮收敛记忆链 (以上轮最优配方为中心进行 ±15% 精细寻优)"],
-            help="【多轮收敛记忆链】是闭环迭代的核心。它利用马尔可夫收敛原理，自动缩小探索步长，围绕上一轮的最优解进行高密度精准轰炸。"
-        )
+        mode_option = st.radio("🤖 模式选择：", ["🌐 全局空间盲搜 (重置冷启动)", "🔁 多轮收敛记忆链 (以上轮最优配方为中心进行 ±15% 精细寻优)"])
+    num_runs = st.number_input("请输入本轮准备做的实验总次数 (孔数)：", min_value=4, value=12, step=1)
     
-    num_runs = st.number_input("请输入本轮准备做的实验总次数 (孔数)：", min_value=4, value=12, step=1, help="建议多联包或96孔板排板时设定为4的倍数。")
-    
+    # ==========================================
+    # 核心重构：后台 LHS 算力引擎换算适配
+    # ==========================================
     if st.button("🚀 生成自适应优化配方表"):
         try:
             parsed_factors = []
             max_possible_combinations = 1
-            col_level_name = "要测试的浓度梯度水平 (英文逗号隔开)"
-            
             for idx, row in edited_flex_df.iterrows():
                 if pd.isna(row["因子名称"]) or str(row["因子名称"]).strip() == "": continue
-                levels = [float(x.strip()) for x in str(row[col_level_name]).split(",") if x.strip()]
+                raw_levels = [float(x.strip()) for x in str(row["要测试的梯度水平 (英文逗号隔开)"]).split(",") if x.strip()]
+                mode = str(row["填写模式"])
+                unit = str(row["用量单位 (如mM/μM/U/pmol)"])
+                
+                # 【关键核心换算步骤】：如果老师挑的是填写总量，这里在进入高维盲搜矩阵前，统一逆向换算转换成“标准化终浓度”
+                final_conc_levels = []
+                for val in raw_levels:
+                    if mode == "按终浓度填写":
+                        final_conc_levels.append(val)
+                    else:
+                        # 终浓度 = 填写的绝对总量 / 体系总体积
+                        final_conc_levels.append(val / st.session_state.total_vol)
+                
                 parsed_factors.append({
-                    "name": str(row["因子名称"]), "stock": float(row["母液浓度"]), "levels": levels
+                    "name": str(row["因子名称"]), 
+                    "stock": float(row["母液浓度"]), 
+                    "levels": final_conc_levels,  # 这里面全是标准化的终浓度了
+                    "unit": unit
                 })
-                max_possible_combinations *= len(levels)
+                max_possible_combinations *= len(final_conc_levels)
             
             st.session_state.active_factors = parsed_factors
-            
             is_memory_mode = "多轮收敛记忆链" in mode_option
             if is_memory_mode and st.session_state.last_round_best is not None:
-                st.info("🧠 **AI 状态链激活**：已成功唤醒上轮记忆基因。系统已自动锁死中心坐标，正在将当前所有梯度的搜索空间收敛至上轮最优解的 ±15% 窄区间进行精密收敛。")
+                st.info("🧠 **AI 状态链激活**：已成功唤醒上轮记忆基因。")
                 for f in parsed_factors:
                     best_center_col = f"{f['name']}(终)"
                     if best_center_col in st.session_state.last_round_best:
                         center_val = float(st.session_state.last_round_best[best_center_col])
-                        f["levels"] = [round(center_val * 0.85, 2), round(center_val, 2), round(center_val * 1.15, 2)]
+                        f["levels"] = [round(center_val * 0.85, 4), round(center_val, 4), round(center_val * 1.15, 4)]
             
             if num_runs > max_possible_combinations and not is_memory_mode:
-                st.error(f"❌ 空间容量超限！当前配置的最大理论绝对不重复组合数为 {max_possible_combinations} 种。请在左侧增加浓度梯度，或调低本轮准备做的实验总次数。")
+                st.error(f"❌ 空间容量超限！当前配置的最大理论组合数为 {max_possible_combinations} 种。")
             else:
                 recipes_compact = []
                 seen_combinations = set()
                 sampler = qmc.LatinHypercube(d=len(parsed_factors), seed=random.randint(1, 1000))
-                run_counter = 1
-                attempts = 0
-                max_attempts = num_runs * 20
+                run_counter, attempts, max_attempts = 1, 0, num_runs * 20
                 raw_backbone_data = []
                 
                 while run_counter <= num_runs and attempts < max_attempts:
                     attempts += 1
                     sample = sampler.random(n=1)[0]
-                    current_combo_concentrations = []
-                    conc_text_parts = []
-                    vol_text_parts = []
+                    current_combo_concentrations, conc_text_parts, vol_text_parts = [], [], []
                     total_component_vol = total_bg_vol
                     backbone_item = {}
                     
@@ -134,11 +191,17 @@ with tab1:
                         
                         actual_concentration = f_meta["levels"][level_idx]
                         current_combo_concentrations.append(actual_concentration)
+                        
+                        # 加样体积 = (终浓度 * 总体积) / 母液浓度
                         add_vol = round((actual_concentration * st.session_state.total_vol) / f_meta["stock"], 2)
                         total_component_vol += add_vol
                         
-                        conc_text_parts.append(f"{f_meta['name']}: {actual_concentration}")
-                        vol_text_parts.append(f"{f_meta['name'].split('(')[0]}加样: {add_vol}μL")
+                        # 动态计算该反应孔内的绝对终用量
+                        calc_total_amt = round(actual_concentration * st.session_state.total_vol, 2)
+                        
+                        # 反馈展示格式：因子名: 终浓度 (换算出的终用量总量单位)
+                        conc_text_parts.append(f"{f_meta['name']}: {round(actual_concentration,3)} {f_meta['unit']} ({calc_total_amt}{f_meta['unit']}总量)")
+                        vol_text_parts.append(f"{f_meta['name']}加样: {add_vol}μL")
                         backbone_item[f"{f_meta['name']}(终)"] = actual_concentration
                 
                     combo_signature = tuple(current_combo_concentrations)
@@ -150,26 +213,21 @@ with tab1:
                         
                         recipes_compact.append({
                             "实验编号": f"Run {run_counter}",
-                            "🔬 核心组分终浓度组合": "  |  ".join(conc_text_parts),
+                            "🔬 核心组分状态（终浓度及换算孔内终用量）": "  |  ".join(conc_text_parts),
                             "🔧 核心变动组分加样清单 (μL)": " | ".join(vol_text_parts),
-                            "💧 0.1%DEPC水 补位 (μL)": water_vol if water_vol >=0 else 0.0
+                            "💧 ddH2O 补位 (μL)": water_vol if water_vol >=0 else 0.0
                         })
                         run_counter += 1
             
             df_compact = pd.DataFrame(recipes_compact)
             df_compact = df_compact[["实验编号"] + [c for c in df_compact.columns if c != "实验编号"]]
-            
-            raw_backbone_df = pd.DataFrame(raw_backbone_data)
-            raw_backbone_df = raw_backbone_df[["实验编号"] + [c for c in raw_backbone_df.columns if c != "实验编号"]]
-            
-            st.session_state.generated_design = raw_backbone_df
+            st.session_state.generated_design = pd.DataFrame(raw_backbone_data)
             st.session_state.display_table_backup = df_compact
-            
-            st.success(f"🧬 系统已基于【拉丁超立方抽样 (LHS) 空间分层平衡方法】，同时根据您设定的 {num_runs} 次实验需求，在多维空间中为您演化并生成以下最佳组合方案：")
+            st.success(f"🧬 系统已为您成功演化方案，并自动完成了终浓度与绝对用量的双向对调折算：")
             st.dataframe(df_compact, use_container_width=True, hide_index=True)
                 
         except Exception as e:
-            st.error(f"解析输入失败。请检查浓度梯度格式是否正确（需用英文逗号分隔）。错误详情: {e}")
+            st.error(f"解析输入失败，请确认输入的梯度和母液是否为纯数字。报错详情: {e}")
 
     if st.session_state.display_table_backup is not None:
         st.markdown("---")
