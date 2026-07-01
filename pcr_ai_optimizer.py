@@ -111,7 +111,7 @@ with tab1:
 
     with col_right:
         st.subheader("🔀 2. 固定组分体积锁定 (不参与变动)")
-       
+        st.caption("锁定的体积会在总反应体系中自动扣除，确保 0.1%DEPC水 补位绝对精准。常用于 Buffer、内标、模板等已固定加样量的组分。")
         bg_default = {
             "固定组分名称": ["10× PCR Buffer", "内标探针/引物 Mix", "模板"],
             "单孔加样单价体积 (μL)": [2.5, 1.0, 5]
@@ -125,7 +125,7 @@ with tab1:
     st.markdown("---")
     st.subheader("🔫 3. 设定本轮排板探索模式与总次数")
     mode_option = "🌐 全局空间盲搜 (第一轮冷启动)"
-   if st.session_state.last_round_best is not None:
+    if st.session_state.last_round_best is not None:
         mode_option = st.radio(
             "🤖 检测到上一轮存在 AI 最优解记忆，请选择本轮排板探索模式：", 
             ["🌐 全局空间盲搜 (重置冷启动)", "🔁 多轮收敛记忆链 (以上轮最优配方为中心进行 ±15% 精细寻优)"],
